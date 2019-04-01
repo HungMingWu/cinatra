@@ -21,6 +21,15 @@ namespace fs = std::experimental::filesystem;
 #include "http_cache.hpp"
 #include "session_manager.hpp"
 #include "cookie.hpp"
+#ifdef CINATRA_ENABLE_COROUTINE
+#include <asio/co_spawn.hpp>
+#include <asio/detached.hpp>
+using boost::asio::awaitable;
+using boost::asio::co_spawn;
+using boost::asio::detached;
+using boost::asio::use_awaitable;
+namespace this_coro = boost::asio::this_coro;
+#endif
 
 namespace cinatra {
 	
@@ -82,6 +91,7 @@ namespace cinatra {
 			return listen(query);
 		}
 
+
 		bool listen(const boost::asio::ip::tcp::resolver::query & query) {
 			boost::asio::ip::tcp::resolver resolver(io_service_pool_.get_io_service());
 			boost::asio::ip::tcp::resolver::iterator endpoints = resolver.resolve(query);
@@ -98,7 +108,13 @@ namespace cinatra {
 				try {
 					acceptor->bind(endpoint);
 					acceptor->listen();
+#ifdef CINATRA_ENABLE_COROUTINE
+					co_spawn(acceptor->get_executor(), [this, acceptor] {
+						return this->start_accept(acceptor);
+					}, detached);
+#else
 					start_accept(acceptor);
+#endif
 					r = true;
 				}
 				catch (const std::exception& e) {
@@ -108,6 +124,7 @@ namespace cinatra {
 
 			return r;
 		}
+
 
 		void stop() {
 			io_service_pool_.stop();
@@ -226,6 +243,29 @@ namespace cinatra {
         }
 
 	private:
+#ifdef CINATRA_ENABLE_COROUTINE
+		awaitable<void> start_accept(std::shared_ptr<boost::asio::ip::tcp::acceptor> const& acceptor)
+		{
+			auto executor = co_await this_coro::executor;
+			for (;;)
+			{
+				auto new_conn = std::make_shared<connection<Socket>>(
+					io_service_pool_.get_io_service(), max_req_buf_size_, keep_alive_timeout_, http_handler_, static_dir_
+#ifdef CINATRA_ENABLE_SSL
+					, ctx_
+#endif
+					);
+				try {
+					new_conn->socket() = co_await acceptor->async_accept(use_awaitable);
+					new_conn->socket().set_option(boost::asio::ip::tcp::no_delay(true));
+					new_conn->start();
+				}
+				catch (const boost::system::error_code& e) {
+					LOG_INFO << "server::handle_accept: " << e.message();
+				}
+			}
+		}
+#else 
 		void start_accept(std::shared_ptr<boost::asio::ip::tcp::acceptor> const& acceptor) {
 			auto new_conn = std::make_shared<connection<Socket>>(
 				io_service_pool_.get_io_service(), max_req_buf_size_, keep_alive_timeout_, http_handler_, static_dir_
@@ -245,7 +285,7 @@ namespace cinatra {
 				start_accept(acceptor);
 			});
 		}
-
+#endif
 		void set_static_res_handler()
 		{
 			set_http_handler<POST,GET>(STAIC_RES, [this](request& req, response& res){

@@ -14,6 +14,8 @@ SET(ENABLE_GZIP OFF)
 SET(ENABLE_SSL OFF)
 SET(ENABLE_CLIENT_SSL OFF)
 option(ENABLE_ASIO_STANDALONE "ENABLE_ASIO_STANDALONE" ON)
+option(ENABLE_COROUTINE "ENABLE_COROUTINE"  OFF)
+
 if (ENABLE_SSL)
 	add_definitions(-DCINATRA_ENABLE_SSL)
 	message(STATUS "Use SSL")
@@ -33,6 +35,14 @@ else()
 	find_package(Boost 1.60 REQUIRED COMPONENTS system)
 endif()
 
+if(ENABLE_COROUTINE)
+	add_definitions(-DCINATRA_ENABLE_COROUTINE)
+	if (MSVC)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /await")
+	else ()
+	endif ()
+endif()
+
 if (ENABLE_SSL)
 find_package(OpenSSL REQUIRED)
 endif()
@@ -49,7 +59,7 @@ set(CINATRA_EXAMPLE
 	)
 
 add_executable(${project_name} ${CINATRA_EXAMPLE})
-include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ${ASIO_STANDALONE_INCLUDE})
 
 target_link_libraries(${project_name} ${Boost_LIBRARIES} uuid -lstdc++fs)
 if (ENABLE_SSL)
