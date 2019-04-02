@@ -12,7 +12,6 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 #include "io_service_pool.hpp"
-#include "connection.hpp"
 #include "http_router.hpp"
 #include "router.hpp"
 #include "nanolog.hpp"
@@ -22,13 +21,14 @@ namespace fs = std::experimental::filesystem;
 #include "session_manager.hpp"
 #include "cookie.hpp"
 #ifdef CINATRA_ENABLE_COROUTINE
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
 using boost::asio::awaitable;
 using boost::asio::co_spawn;
 using boost::asio::detached;
 using boost::asio::use_awaitable;
 namespace this_coro = boost::asio::this_coro;
+#include "connection_coro.hpp"
+#else
+#include "connection.hpp"
 #endif
 
 namespace cinatra {
